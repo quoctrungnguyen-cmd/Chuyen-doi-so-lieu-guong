@@ -109,7 +109,7 @@
 <body>
 <main>
   <h1>Sổ đo gương</h1>
-  <p class="lead">Nhập mã gương, STT trong hệ, trạm toàn đạc, phân loại góc HAZ, ZAR theo gon – phút – giây (tool đổi sang gon thập phân) và SD theo mét, rồi lưu vào danh sách. Có thể dán cả chuỗi như <code>123 45 67</code> vào ô gon. Nhấn Enter ở bất kỳ ô nào để lưu.</p>
+  <p class="lead">Nhập mã gương, STT trong hệ, trạm toàn đạc, phân loại, góc HAZ, ZAR theo độ – phút – giây (tool đổi sang gon thập phân) và SD theo mét, rồi lưu vào danh sách. Công thức: gon = (độ + phút/60 + giây/3600) × 10/9. Có thể dán cả chuỗi như <code>123 45 30</code> hoặc <code>123°45'30"</code> vào ô độ. Nhấn Enter ở bất kỳ ô nào để lưu.</p>
 
   <section class="device" id="device">
     <div class="row codeRow">
@@ -157,7 +157,7 @@
     <div class="tableWrap" id="tableWrap"></div>
   </section>
 
-  <p class="note">Danh sách được lưu trên trình duyệt của máy bạn, mở lại trang vẫn còn. Người khác mở link sẽ có danh sách riêng của họ. Nút "Sao chép bảng" cho phép dán thẳng vào Excel. Hệ gon: 1 gon = 100 phút, 1 phút = 100 giây, nên phút và giây phải nhỏ hơn 100.</p>
+  <p class="note">Danh sách được lưu trên trình duyệt của máy bạn, mở lại trang vẫn còn. Người khác mở link sẽ có danh sách riêng của họ. Nút "Sao chép bảng" cho phép dán thẳng vào Excel. Góc nhập theo hệ độ: 1° = 60 phút, 1 phút = 60 giây, nên phút và giây phải nhỏ hơn 60. 360° = 400 gon.</p>
 </main>
 
 <script>
@@ -178,8 +178,8 @@ PARAMS.forEach(p => {
   row.innerHTML = `
     <div class="name">${p.name}<small>${p.sub}</small></div>
     <div class="fields">
-      <label class="f g"><span>Gon</span><input inputmode="decimal" id="${p.id}-g" autocomplete="off"></label>
-      <span class="unit">g</span>
+      <label class="f g"><span>Độ</span><input inputmode="decimal" id="${p.id}-g" autocomplete="off"></label>
+      <span class="unit">°</span>
       <label class="f"><span>Phút</span><input inputmode="decimal" id="${p.id}-c" autocomplete="off"></label>
       <span class="unit">'</span>
       <label class="f"><span>Giây</span><input inputmode="decimal" id="${p.id}-cc" autocomplete="off"></label>
@@ -261,7 +261,7 @@ const num = s => {
 };
 function decimals(ccStr) {
   const m = String(ccStr).replace(",", ".").split(".")[1];
-  return Math.min(4 + (m ? m.length : 0), 10);
+  return 5; // luôn 5 chữ số thập phân (0.00001 gon ≈ 0.03")
 }
 function readParam(p) {
   const gEl = $(p.id + "-g"), cEl = $(p.id + "-c"), ccEl = $(p.id + "-cc");
@@ -271,12 +271,12 @@ function readParam(p) {
   if (!gEl.value.trim() && !cEl.value.trim() && !ccEl.value.trim()) { out.textContent = "—"; return { empty: true }; }
   const g = num(gEl.value), c = num(cEl.value), cc = num(ccEl.value);
   const errs = [];
-  if (isNaN(g)) { errs.push("Gon không hợp lệ."); gEl.setAttribute("aria-invalid", "true"); }
-  if (isNaN(c) || c < 0 || c >= 100) { errs.push("Phút phải từ 0 đến dưới 100."); cEl.setAttribute("aria-invalid", "true"); }
-  if (isNaN(cc) || cc < 0 || cc >= 100) { errs.push("Giây phải từ 0 đến dưới 100."); ccEl.setAttribute("aria-invalid", "true"); }
+  if (isNaN(g)) { errs.push("Độ không hợp lệ."); gEl.setAttribute("aria-invalid", "true"); }
+  if (isNaN(c) || c < 0 || c >= 60) { errs.push("Phút phải từ 0 đến dưới 60."); cEl.setAttribute("aria-invalid", "true"); }
+  if (isNaN(cc) || cc < 0 || cc >= 60) { errs.push("Giây phải từ 0 đến dưới 60."); ccEl.setAttribute("aria-invalid", "true"); }
   if (errs.length) { msg.textContent = errs.join(" "); out.textContent = "—"; return { error: true }; }
   const sign = String(gEl.value).trim().startsWith("-") ? -1 : 1;
-  const value = sign * (Math.abs(g) + c / 100 + cc / 10000);
+  const value = sign * ((Math.abs(g) * 3600 + c * 60 + cc) / 3240); // (d + m/60 + s/3600) × 10/9
   const text = value.toFixed(decimals(ccEl.value));
   out.textContent = text + " gon";
   return { text, raw: `${gEl.value.trim() || 0} ${cEl.value.trim() || 0} ${ccEl.value.trim() || 0}` };
@@ -374,13 +374,13 @@ const toNum = s => (s === "" || s == null) ? "" : Number(s);
 async function exportXlsx() {
   const status = $("status");
   if (typeof XLSX === "undefined") { status.textContent = "Không tải được thư viện Excel, hãy dùng nút Sao chép bảng."; return; }
-  const rows = [["STT hệ", "Mã gương", "Trạm", "Phân loại", "HAZ (gon)", "ZAR (gon)", "SD (m)", "HAZ gốc (g c cc)", "ZAR gốc (g c cc)", "Thời gian lưu"]];
+  const rows = [["STT hệ", "Mã gương", "Trạm", "Phân loại", "HAZ (gon)", "ZAR (gon)", "SD (m)", "HAZ gốc (° ' \")", "ZAR gốc (° ' \")", "Thời gian lưu"]];
   list.forEach(x => rows.push([x.stt === undefined ? "" : x.stt, x.code, tsText(x.ts), x.kind || "", toNum(x.haz), toNum(x.zar), toNum(x.o), x.hazRaw, x.zarRaw, new Date(x.t).toLocaleString("vi-VN")]));
   const ws = XLSX.utils.aoa_to_sheet(rows);
   ws["!cols"] = [{ wch: 7 }, { wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 20 }];
   for (let r = 1; r < rows.length; r++) for (let c = 4; c <= 5; c++) {
     const cell = ws[XLSX.utils.encode_cell({ r, c })];
-    if (cell && cell.t === "n") cell.z = "0.0000";
+    if (cell && cell.t === "n") cell.z = "0.00000";
   }
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "So do guong");
