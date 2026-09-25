@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sổ đo gương – đổi gon sang gon thập phân</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700&family=B612+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    --bg: #E6EAE3; --panel: #F7F8F5; --ink: #1C2B36; --muted: #5C6B73;
+    --line: #C3CBC4; --lcd: #CFDCC4; --lcd-ink: #1F3320; --accent: #E8B400;
+    --err: #B3261E; --hl: #FFF4C2;
+    --sans: "Be Vietnam Pro", "Segoe UI", system-ui, sans-serif;
+    --mono: "B612 Mono", ui-monospace, "Consolas", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141B20; --panel: #1D262C; --ink: #E4E9E6; --muted: #93A1A6;
+      --line: #34424A; --lcd: #243322; --lcd-ink: #B9E3A8; --err: #FF8A80; --hl: #3A3418;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141B20; --panel: #1D262C; --ink: #E4E9E6; --muted: #93A1A6;
+    --line: #34424A; --lcd: #243322; --lcd-ink: #B9E3A8; --err: #FF8A80; --hl: #3A3418;
+  }
+  *, *::before, *::after { box-sizing: inherit; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 16px; line-height: 1.5; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 18px 48px; }
+  h1 { font-size: 1.6rem; line-height: 1.25; margin: 0 0 6px; }
+  h2 { font-size: 1.2rem; margin: 0; }
+  .lead { color: var(--muted); margin: 0 0 24px; max-width: 62ch; }
+  .lead code { font-family: var(--mono); font-size: .9em; color: var(--ink); }
+
+  .device { background: var(--panel); border: 1px solid var(--line); border-top: 6px solid var(--accent); border-radius: 10px; overflow: hidden; }
+  .row { display: grid; grid-template-columns: 110px 1fr; gap: 10px 14px; padding: 16px 18px; border-bottom: 1px solid var(--line); }
+  .codeRow { background: var(--bg); }
+  .name { font-weight: 700; font-size: 1.05rem; }
+  .name small { display: block; font-weight: 400; color: var(--muted); font-size: .85rem; }
+  .fields { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; }
+  .f { display: flex; flex-direction: column; gap: 3px; }
+  .f span { font-size: .8rem; color: var(--muted); }
+  input {
+    font-family: var(--mono); font-size: 1.05rem; color: var(--ink); background: transparent;
+    border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 92px;
+  }
+  .f.g input { width: 110px; }
+  #code { width: 200px; font-weight: 700; background: var(--panel); }
+  input:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; border-color: var(--ink); }
+  input[aria-invalid="true"] { border-color: var(--err); }
+  .unit { font-family: var(--mono); color: var(--muted); padding-bottom: 9px; }
+  .out { grid-column: 2; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .lcd { font-family: var(--mono); font-weight: 700; font-size: 1.3rem; background: var(--lcd); color: var(--lcd-ink); border-radius: 6px; padding: 5px 12px; min-width: 190px; }
+  .msg { grid-column: 2; color: var(--err); font-size: .88rem; }
+  .msg:empty { display: none; }
+
+  button { font-family: var(--sans); font-size: .9rem; font-weight: 500; cursor: pointer; border-radius: 6px; padding: 7px 12px; border: 1px solid var(--line); background: transparent; color: var(--ink); }
+  button:hover { border-color: var(--ink); }
+  button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .primary { background: var(--accent); border-color: var(--accent); color: #1C2B36; font-weight: 700; }
+  .danger { color: var(--err); }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding: 14px 18px; background: var(--bg); }
+  .status { font-size: .88rem; color: var(--muted); }
+
+  .list { margin-top: 28px; }
+  .listHead { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .tools { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tableWrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: .95rem; }
+  th, td { padding: 8px 12px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { font-weight: 500; color: var(--muted); font-size: .85rem; background: var(--bg); }
+  th:nth-child(2), td:nth-child(2) { text-align: left; }
+  td { font-family: var(--mono); }
+  td.code { font-weight: 700; }
+  tr:last-child td { border-bottom: none; }
+  tr.fresh td { background: var(--hl); }
+  td button { padding: 3px 8px; font-size: .8rem; }
+  .empty { padding: 22px 18px; color: var(--muted); }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { font-family: var(--mono); padding: 7px 11px; }
+  .chip[aria-pressed="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+  .kind { font-family: var(--sans); }
+  .kind[aria-pressed="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+  .hint { grid-column: 2; font-size: .82rem; color: var(--muted); margin: -4px 0 0; }
+  #stt { width: 110px; font-weight: 700; background: var(--panel); }
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  select { font-family: var(--sans); font-size: .9rem; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+  select:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
+  td.tag { font-family: var(--sans); font-size: .85rem; }
+  .note { margin-top: 18px; color: var(--muted); font-size: .88rem; max-width: 64ch; }
+
+  @media (max-width: 560px) {
+    .row { grid-template-columns: 1fr; }
+    .out, .msg, .hint { grid-column: 1; }
+    #stt { width: 100%; }
+    input, .f.g input { width: 80px; }
+    #code { width: 100%; }
+    .lcd { min-width: 0; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Sổ đo gương</h1>
+  <p class="lead">Nhập mã gương, STT trong hệ, trạm toàn đạc, phân loại và các giá trị gon – phút – giây, tool đổi sang gon thập phân rồi lưu vào danh sách. Có thể dán cả chuỗi như <code>123 45 67</code> vào ô gon. Nhấn Enter ở bất kỳ ô nào để lưu.</p>
+
+  <section class="device" id="device">
+    <div class="row codeRow">
+      <label class="name" for="code">Mã gương</label>
+      <div class="fields"><input id="code" autocomplete="off" placeholder="VD: G1"></div>
+      <div class="msg" id="code-msg"></div>
+    </div>
+    <div class="row codeRow">
+      <label class="name" for="stt">STT trong hệ</label>
+      <div class="fields"><input id="stt" inputmode="numeric" autocomplete="off" placeholder="VD: 1"></div>
+      <div class="msg" id="stt-msg"></div>
+    </div>
+    <div class="row codeRow">
+      <div class="name" id="tsLabel">Trạm toàn đạc</div>
+      <div class="chips" role="group" aria-labelledby="tsLabel" id="tsChips"></div>
+      <p class="hint">Chọn được nhiều trạm, ví dụ gương chung thấy từ TS1 và TS2.</p>
+      <div class="msg" id="ts-msg"></div>
+    </div>
+    <div class="row codeRow">
+      <div class="name" id="kindLabel">Phân loại</div>
+      <div class="chips" role="group" aria-labelledby="kindLabel" id="kindChips"></div>
+      <div class="msg" id="kind-msg"></div>
+    </div>
+    <div id="rows"></div>
+    <div class="actions">
+      <button type="button" class="primary" id="save">Lưu vào danh sách</button>
+      <button type="button" id="clearInputs">Xoá ô nhập</button>
+      <span class="status" id="status" aria-live="polite"></span>
+    </div>
+  </section>
+
+  <section class="list">
+    <div class="listHead">
+      <h2 id="listTitle">Danh sách</h2>
+      <div class="tools">
+        <button type="button" id="exportXlsx">Tải file Excel</button>
+        <button type="button" id="copyTable">Sao chép bảng</button>
+        <button type="button" class="danger" id="clearList">Xoá danh sách</button>
+      </div>
+    </div>
+    <div class="filters">
+      <label>Lọc theo trạm <select id="fTs"><option value="">Tất cả</option></select></label>
+      <label>Loại <select id="fKind"><option value="">Tất cả</option></select></label>
+    </div>
+    <div class="tableWrap" id="tableWrap"></div>
+  </section>
+
+  <p class="note">Danh sách được lưu trên trình duyệt của máy bạn, mở lại trang vẫn còn. Người khác mở link sẽ có danh sách riêng của họ. Nút "Sao chép bảng" cho phép dán thẳng vào Excel. Hệ gon: 1 gon = 100 phút, 1 phút = 100 giây, nên phút và giây phải nhỏ hơn 100.</p>
+</main>
+
+<script>
+const PARAMS = [
+  { id: "haz", name: "HAZ", sub: "Hz – góc ngang" },
+  { id: "zar", name: "ZAR", sub: "Vt – góc đứng" },
+  { id: "o",   name: "O",   sub: "SD" }
+];
+const KEY = "so-do-guong-v1";
+const STATIONS = ["TS1", "TS2", "TS3", "TS4", "TS5", "TS6"];
+const KINDS = ["Gương đo", "Gương tham chiếu", "Gương chung"];
+let selTs = new Set(), selKind = "";
+const $ = id => document.getElementById(id);
+
+// ---------- build input rows ----------
+PARAMS.forEach(p => {
+  const row = document.createElement("div");
+  row.className = "row";
+  row.innerHTML = `
+    <div class="name">${p.name}<small>${p.sub}</small></div>
+    <div class="fields">
+      <label class="f g"><span>Gon</span><input inputmode="decimal" id="${p.id}-g" autocomplete="off"></label>
+      <span class="unit">g</span>
+      <label class="f"><span>Phút</span><input inputmode="decimal" id="${p.id}-c" autocomplete="off"></label>
+      <span class="unit">'</span>
+      <label class="f"><span>Giây</span><input inputmode="decimal" id="${p.id}-cc" autocomplete="off"></label>
+      <span class="unit">"</span>
+    </div>
+    <div class="out">
+      <output class="lcd" id="${p.id}-out" aria-live="polite">—</output>
+      <button type="button" data-copy="${p.id}">Sao chép</button>
+    </div>
+    <div class="msg" id="${p.id}-msg"></div>`;
+  $("rows").appendChild(row);
+});
+
+// ---------- station / kind chips ----------
+STATIONS.forEach(s => {
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "chip"; b.textContent = s; b.dataset.ts = s;
+  b.setAttribute("aria-pressed", "false");
+  $("tsChips").appendChild(b);
+  $("fTs").insertAdjacentHTML("beforeend", `<option>${s}</option>`);
+});
+KINDS.forEach(k => {
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "kind"; b.textContent = k; b.dataset.kind = k;
+  b.setAttribute("aria-pressed", "false");
+  $("kindChips").appendChild(b);
+  $("fKind").insertAdjacentHTML("beforeend", `<option>${k}</option>`);
+});
+function syncChips() {
+  document.querySelectorAll("[data-ts]").forEach(b => b.setAttribute("aria-pressed", selTs.has(b.dataset.ts)));
+  document.querySelectorAll("[data-kind]").forEach(b => b.setAttribute("aria-pressed", b.dataset.kind === selKind));
+}
+const tsText = arr => STATIONS.filter(s => (arr || []).includes(s)).join(", ");
+
+// ---------- storage ----------
+let list = [];
+let freshIndex = -1;
+function load() {
+  try { const s = localStorage.getItem(KEY); list = s ? JSON.parse(s) : []; if (!Array.isArray(list)) list = []; }
+  catch { list = []; }
+}
+function persist() {
+  try { localStorage.setItem(KEY, JSON.stringify(list)); return true; }
+  catch { return false; }
+}
+
+// ---------- conversion ----------
+const num = s => {
+  s = String(s).trim().replace(",", ".");
+  if (s === "") return 0;
+  return /^-?(\d+\.?\d*|\.\d+)$/.test(s) ? parseFloat(s) : NaN;
+};
+function decimals(ccStr) {
+  const m = String(ccStr).replace(",", ".").split(".")[1];
+  return Math.min(4 + (m ? m.length : 0), 10);
+}
+function readParam(p) {
+  const gEl = $(p.id + "-g"), cEl = $(p.id + "-c"), ccEl = $(p.id + "-cc");
+  const out = $(p.id + "-out"), msg = $(p.id + "-msg");
+  [gEl, cEl, ccEl].forEach(e => e.removeAttribute("aria-invalid"));
+  msg.textContent = "";
+  if (!gEl.value.trim() && !cEl.value.trim() && !ccEl.value.trim()) { out.textContent = "—"; return { empty: true }; }
+  const g = num(gEl.value), c = num(cEl.value), cc = num(ccEl.value);
+  const errs = [];
+  if (isNaN(g)) { errs.push("Gon không hợp lệ."); gEl.setAttribute("aria-invalid", "true"); }
+  if (isNaN(c) || c < 0 || c >= 100) { errs.push("Phút phải từ 0 đến dưới 100."); cEl.setAttribute("aria-invalid", "true"); }
+  if (isNaN(cc) || cc < 0 || cc >= 100) { errs.push("Giây phải từ 0 đến dưới 100."); ccEl.setAttribute("aria-invalid", "true"); }
+  if (errs.length) { msg.textContent = errs.join(" "); out.textContent = "—"; return { error: true }; }
+  const sign = String(gEl.value).trim().startsWith("-") ? -1 : 1;
+  const value = sign * (Math.abs(g) + c / 100 + cc / 10000);
+  const text = value.toFixed(decimals(ccEl.value));
+  out.textContent = text + " gon";
+  return { text, raw: `${gEl.value.trim() || 0} ${cEl.value.trim() || 0} ${ccEl.value.trim() || 0}` };
+}
+const readAll = () => PARAMS.map(readParam);
+
+function trySplit(id) {
+  const gEl = $(id + "-g");
+  const parts = gEl.value.replace(/,/g, ".").match(/-?\d+(?:\.\d+)?/g);
+  if (parts && parts.length >= 2 && /[\s'"g°]/i.test(gEl.value)) {
+    gEl.value = parts[0];
+    $(id + "-c").value = parts[1] || "";
+    $(id + "-cc").value = parts[2] || "";
+  }
+}
+
+// ---------- next code suggestion: G1 -> G2, 007 -> 008 ----------
+function nextCode(code) {
+  const m = code.match(/^(.*?)(\d+)$/);
+  if (!m) return code;
+  const n = String(parseInt(m[2], 10) + 1).padStart(m[2].length, "0");
+  return m[1] + n;
+}
+
+// ---------- save ----------
+function save() {
+  const status = $("status");
+  const code = $("code").value.trim();
+  const sttStr = $("stt").value.trim();
+  ["code", "stt"].forEach(id => { $(id).removeAttribute("aria-invalid"); $(id + "-msg").textContent = ""; });
+  $("ts-msg").textContent = ""; $("kind-msg").textContent = "";
+  const r = readAll();
+  if (!code) { $("code-msg").textContent = "Nhập mã gương trước khi lưu."; $("code").setAttribute("aria-invalid", "true"); $("code").focus(); return; }
+  if (sttStr && !/^\d+$/.test(sttStr)) { $("stt-msg").textContent = "STT phải là số nguyên dương."; $("stt").setAttribute("aria-invalid", "true"); $("stt").focus(); return; }
+  if (!selTs.size) { $("ts-msg").textContent = "Chọn ít nhất một trạm toàn đạc."; return; }
+  if (!selKind) { $("kind-msg").textContent = "Chọn phân loại gương."; return; }
+  if (selKind !== "Gương chung" && selTs.size > 1) { $("ts-msg").textContent = "Gương đo và gương tham chiếu chỉ thuộc một trạm. Chọn một trạm hoặc đổi sang Gương chung."; return; }
+  if (r.some(x => x.error)) { status.textContent = "Sửa các ô báo đỏ rồi lưu lại."; return; }
+  if (r.every(x => x.empty)) { status.textContent = "Chưa nhập thông số nào."; $("haz-g").focus(); return; }
+  list.push({
+    code, stt: sttStr ? Number(sttStr) : "", ts: STATIONS.filter(s => selTs.has(s)), kind: selKind,
+    haz: r[0].text || "", zar: r[1].text || "", o: r[2].text || "",
+    hazRaw: r[0].raw || "", zarRaw: r[1].raw || "", oRaw: r[2].raw || "",
+    t: new Date().toISOString()
+  });
+  freshIndex = list.length - 1;
+  const ok = persist();
+  const dup = list.filter(x => x.code === code).length > 1;
+  const dupStt = sttStr && list.filter(x => String(x.stt) === sttStr).length > 1;
+  status.textContent = `Đã lưu ${code}.` + (dup ? " Mã này đã có trong danh sách trước đó." : "") + (dupStt ? ` STT ${sttStr} bị trùng.` : "") + (ok ? "" : " Trình duyệt không cho lưu lâu dài, hãy tải file Excel trước khi đóng trang.");
+  PARAMS.forEach(p => ["g", "c", "cc"].forEach(k => $(`${p.id}-${k}`).value = ""));
+  readAll();
+  $("code").value = nextCode(code);
+  $("stt").value = sttStr ? String(Number(sttStr) + 1) : "";
+  render();
+  $("haz-g").focus();
+}
+
+// ---------- table ----------
+function render() {
+  const wrap = $("tableWrap");
+  $("listTitle").textContent = list.length ? `Danh sách (${list.length} gương)` : "Danh sách";
+  $("fTs").disabled = $("fKind").disabled = !list.length;
+  ["exportXlsx", "copyTable", "clearList"].forEach(id => $(id).disabled = !list.length);
+  if (!list.length) { wrap.innerHTML = `<div class="empty">Chưa có gương nào. Nhập mã gương và thông số ở trên rồi bấm "Lưu vào danh sách".</div>`; return; }
+  const fTs = $("fTs").value, fKind = $("fKind").value;
+  const shown = list.map((x, i) => [x, i]).filter(([x]) => (!fTs || (x.ts || []).includes(fTs)) && (!fKind || x.kind === fKind));
+  if (!shown.length) { wrap.innerHTML = `<div class="empty">Không có gương nào khớp bộ lọc.</div>`; return; }
+  const table = document.createElement("table");
+  table.innerHTML = `<thead><tr><th>STT hệ</th><th>Mã gương</th><th>Trạm</th><th>Loại</th><th>HAZ (gon)</th><th>ZAR (gon)</th><th>O (gon)</th><th></th></tr></thead>`;
+  const tb = document.createElement("tbody");
+  shown.forEach(([x, i]) => {
+    const tr = document.createElement("tr");
+    if (i === freshIndex) tr.className = "fresh";
+    [x.stt === undefined ? "" : String(x.stt), x.code, tsText(x.ts), x.kind || "", x.haz, x.zar, x.o].forEach((v, j) => {
+      const td = document.createElement("td");
+      td.textContent = v || "";
+      if (j === 1) td.className = "code";
+      if (j === 2 || j === 3) td.className = "tag";
+      tr.appendChild(td);
+    });
+    const td = document.createElement("td");
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = "Xoá"; b.dataset.del = i;
+    b.setAttribute("aria-label", "Xoá gương " + x.code);
+    td.appendChild(b); tr.appendChild(td);
+    tb.appendChild(tr);
+  });
+  table.appendChild(tb);
+  wrap.innerHTML = ""; wrap.appendChild(table);
+}
+
+const toNum = s => (s === "" || s == null) ? "" : Number(s);
+
+async function exportXlsx() {
+  const status = $("status");
+  if (typeof XLSX === "undefined") { status.textContent = "Không tải được thư viện Excel, hãy dùng nút Sao chép bảng."; return; }
+  const rows = [["STT hệ", "Mã gương", "Trạm", "Phân loại", "HAZ (gon)", "ZAR (gon)", "O (gon)", "HAZ gốc (g c cc)", "ZAR gốc (g c cc)", "O gốc (g c cc)", "Thời gian lưu"]];
+  list.forEach(x => rows.push([x.stt === undefined ? "" : x.stt, x.code, tsText(x.ts), x.kind || "", toNum(x.haz), toNum(x.zar), toNum(x.o), x.hazRaw, x.zarRaw, x.oRaw, new Date(x.t).toLocaleString("vi-VN")]));
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws["!cols"] = [{ wch: 7 }, { wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 20 }];
+  for (let r = 1; r < rows.length; r++) for (let c = 4; c <= 6; c++) {
+    const cell = ws[XLSX.utils.encode_cell({ r, c })];
+    if (cell && cell.t === "n") cell.z = "0.0000";
+  }
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "So do guong");
+  const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  const d = new Date(), pad = n => String(n).padStart(2, "0");
+  const filename = `so-do-guong_${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.xlsx`;
+  try {
+    const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    status.textContent = "Đã tải file Excel.";
+  } catch { status.textContent = "Không tải được file, hãy dùng nút Sao chép bảng rồi dán vào Excel."; }
+}
+
+async function copyText(t, label) {
+  const status = $("status");
+  try { await navigator.clipboard.writeText(t); status.textContent = "Đã sao chép " + label + "."; }
+  catch { status.textContent = "Trình duyệt chặn sao chép, hãy bôi đen để copy."; }
+}
+
+let clearArmed = false, clearTimer;
+
+// ---------- events ----------
+document.addEventListener("input", e => {
+  const id = e.target.id || "";
+  if (id.endsWith("-g")) trySplit(id.slice(0, -2));
+  if (id !== "code") readAll();
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); save(); }
+});
+document.addEventListener("click", e => {
+  const t = e.target;
+  if (t.dataset && t.dataset.copy) {
+    const v = $(t.dataset.copy + "-out").textContent;
+    if (v !== "—") copyText(v.replace(" gon", ""), PARAMS.find(p => p.id === t.dataset.copy).name);
+  }
+  if (t.dataset && t.dataset.del !== undefined) {
+    const i = Number(t.dataset.del), code = list[i].code;
+    list.splice(i, 1); freshIndex = -1; persist(); render();
+    $("status").textContent = `Đã xoá ${code}.`;
+  }
+  if (t.dataset && t.dataset.ts) {
+    const s = t.dataset.ts;
+    if (selKind === "Gương chung") { selTs.has(s) ? selTs.delete(s) : selTs.add(s); }
+    else { selTs = selTs.has(s) && selTs.size === 1 ? new Set() : new Set([s]); }
+    $("ts-msg").textContent = ""; syncChips();
+  }
+  if (t.dataset && t.dataset.kind) {
+    selKind = t.dataset.kind;
+    if (selKind !== "Gương chung" && selTs.size > 1) selTs = new Set([STATIONS.find(s => selTs.has(s))]);
+    $("kind-msg").textContent = ""; syncChips();
+  }
+  if (t.id === "save") save();
+  if (t.id === "clearInputs") {
+    PARAMS.forEach(p => ["g", "c", "cc"].forEach(k => $(`${p.id}-${k}`).value = ""));
+    readAll(); $("status").textContent = ""; $("haz-g").focus();
+  }
+  if (t.id === "exportXlsx") exportXlsx();
+  if (t.id === "copyTable") {
+    const lines = [["STT hệ", "Mã gương", "Trạm", "Phân loại", "HAZ", "ZAR", "O"].join("\t")]
+      .concat(list.map(x => [x.stt === undefined ? "" : x.stt, x.code, tsText(x.ts), x.kind || "", x.haz, x.zar, x.o].join("\t")));
+    copyText(lines.join("\n"), "bảng");
+  }
+  if (t.id === "clearList") {
+    if (!clearArmed) {
+      clearArmed = true; t.textContent = "Bấm lần nữa để xoá hết";
+      clearTimer = setTimeout(() => { clearArmed = false; t.textContent = "Xoá danh sách"; }, 4000);
+    } else {
+      clearTimeout(clearTimer); clearArmed = false; t.textContent = "Xoá danh sách";
+      list = []; freshIndex = -1; persist(); render(); $("status").textContent = "Đã xoá toàn bộ danh sách.";
+    }
+  }
+});
+
+$("fTs").addEventListener("change", render);
+$("fKind").addEventListener("change", render);
+load();
+render();
+if (list.length) {
+  const last = list[list.length - 1];
+  selTs = new Set(last.ts || []); selKind = last.kind || "";
+  if (last.stt !== "" && last.stt !== undefined) $("stt").value = String(Number(last.stt) + 1);
+}
+syncChips();
+$("code").value = list.length ? nextCode(list[list.length - 1].code) : "";
+$("code").focus();
+</script>
+</body>
+</html>
